@@ -5,6 +5,11 @@ on:
     workflows: [publish]
     types: [completed]
   workflow_dispatch:
+    inputs:
+      many_users:
+        description: 'Also run 150 simultaneous users (15 machines x 10 browsers; about 15 GB of site traffic)'
+        type: boolean
+        default: false
 env:
   SITE_URL: https://valerioghezzi.github.io/clauster_web/
 jobs:
@@ -48,3 +53,13 @@ jobs:
       - uses: actions/setup-node@v4
         with: {node-version: 22}
       - run: cd tests && REQUESTS=1000 node burst.js
+  many-users:
+    if: github.event_name == 'workflow_dispatch' && inputs.many_users
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix: {machine: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]}
+    steps:
+      - uses: actions/checkout@v4
+      - run: cd tests && npm install playwright@1 >/dev/null 2>&1 && npx playwright install --with-deps chromium >/dev/null 2>&1 && USERS=10 TAG=m${{ matrix.machine }} node concurrent.js

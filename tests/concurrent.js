@@ -6,7 +6,7 @@ const URL = process.env.SITE_URL || 'http://127.0.0.1:8008/', USERS = +(process.
   const one = async (u) => {
     const ctx = await b.newContext({ viewport: { width: 1280, height: 860 } }); const p = await ctx.newPage(); const t0 = Date.now(); let f = null;
     await p.goto(URL);
-    for (let i = 0; i < 180 && !f; i++) { await p.waitForTimeout(2000); for (const fr of p.frames()) { try { if (await fr.$('#example')) { f = fr; break } } catch (e) {} } }
+    for (let i = 0; i < 450 && !f; i++) { await p.waitForTimeout(2000); for (const fr of p.frames()) { try { if (await fr.$('#example')) { f = fr; break } } catch (e) {} } }
     if (!f) return { user: `${TAG}-${u}`, ok: false, step: 'load', seconds: Math.round((Date.now() - t0) / 1000) };
     const ready = Math.round((Date.now() - t0) / 1000);
     await f.click('#example'); await p.waitForTimeout(3000); await f.click('a[data-value="Analysis"]'); await p.waitForTimeout(800);
