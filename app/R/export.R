@@ -3,10 +3,12 @@ profile_values <- function(x) {
   if(!is.factor(x)) return(as.numeric(x))
   num <- suppressWarnings(as.numeric(as.character(x)));if(anyNA(num[!is.na(x)])) as.numeric(x) else num
 }
+# A variable whose name is also a column of the summary tables (for example N) gets the suffix "(variable)".
+table_var_name <- function(v) ifelse(v %in% c("Cluster","N","Percent","Label","Mean_silhouette"),paste(v,"(variable)"),v)
 cluster_profiles <- function(raw,cluster) {
   k<-max(cluster);sz<-tabulate(cluster,k);out<-data.frame(Cluster=c(seq_len(k),"All"),N=c(sz,length(cluster)),Percent=c(100*sz/length(cluster),100),stringsAsFactors=FALSE,check.names=FALSE)
   for(v in names(raw)) {x<-profile_values(raw[[v]])
-    out[[v]]<-c(vapply(seq_len(k),function(g)mean(x[cluster==g],na.rm=TRUE),numeric(1)),mean(x,na.rm=TRUE))}
+    out[[table_var_name(v)]]<-c(vapply(seq_len(k),function(g)mean(x[cluster==g],na.rm=TRUE),numeric(1)),mean(x,na.rm=TRUE))}
   out
 }
 solution_tables <- function(result,k) {
@@ -14,9 +16,17 @@ solution_tables <- function(result,k) {
   sol<-result$solutions[[as.character(k)]]
   if(is.null(sol))return(list())
   e<-sol$evaluation;out<-list(Clusters=e$clusters)
-  if(!is.null(result$prepared$raw)&&nrow(result$prepared$raw)==length(sol$cluster))out$Profiles<-cluster_profiles(result$prepared$raw,sol$cluster)
-  if(!is.null(e$centers))out$Centroids<-data.frame(Cluster=seq_len(nrow(e$centers)),e$centers,check.names=FALSE)
-  if(!is.null(e$SD))out$Within_SD<-data.frame(Cluster=seq_len(nrow(e$SD)),e$SD,check.names=FALSE)
+  if(!is.null(result$prepared$raw)&&nrow(result$prepared$raw)==length(sol$cluster)) {
+    raw<-result$prepared$raw;role<-setNames(as.list(rep("Active",ncol(raw))),names(raw))
+    il<-result$illustrative
+    if(!is.null(il)&&nrow(il)==length(sol$cluster)){names(il)<-paste(names(il),"(illustrative)");raw<-cbind(raw,il);for(v in names(il))role[[v]]<-"Illustrative"}
+    out$Profiles<-cluster_profiles(raw,sol$cluster)
+    vt<-variable_tests(raw,sol$cluster,role);pw<-if(sol$k>1&&sol$k<=12) tryCatch(pairwise_tests(raw,sol$cluster,role),error=function(e)NULL) else NULL
+    if(!is.null(vt)){if(!is.null(pw))vt$Groups<-unname(pw$letters[vt$Variable]);out$Variable_tests<-vt}
+    if(!is.null(pw))out$Pairwise_comparisons<-pw$table
+  }
+  if(!is.null(e$centers)){ce<-as.data.frame(e$centers,check.names=FALSE);names(ce)<-table_var_name(names(ce));out$Centroids<-data.frame(Cluster=seq_len(nrow(ce)),ce,check.names=FALSE)}
+  if(!is.null(e$SD)){sd<-as.data.frame(e$SD,check.names=FALSE);names(sd)<-table_var_name(names(sd));out$Within_SD<-data.frame(Cluster=seq_len(nrow(sd)),sd,check.names=FALSE)}
   if(!is.null(e$silhouette)){sw<-unclass(e$silhouette);out$Silhouette<-data.frame(ID=sol$ids,Cluster=as.integer(sw[,1]),Neighbor=as.integer(sw[,2]),Silhouette_width=as.numeric(sw[,3]))}
   if(!is.null(sol$fit$posterior))out$Posterior<-data.frame(ID=sol$ids,sol$fit$posterior)
   if(!is.null(sol$fit$trace))out$Relocation<-sol$fit$trace

@@ -87,6 +87,14 @@ key_findings <- function(result,k=NULL) {
       paste0(sprintf("best on %d of %d criteria",hits[sk],total),if(close) sprintf("; k = %s is best on %d, so compare both profiles",other,hits[other]) else "")
     add("Suggested solution",sprintf("k = %s (%s).%s",sk,why,if(k!=sk) sprintf(" This page shows k = %s.",k) else ""))
   }
+  ag <- result$tables$Agglomeration
+  if(!is.null(ag)&&length(result$solutions)>1) {
+    ks <- as.integer(names(result$solutions));r <- ag[is.finite(ag$Relative_increase)&(ag$Clusters_after_stage+1)%in%ks,,drop=FALSE]
+    if(nrow(r)) {r <- r[order(-r$Relative_increase),,drop=FALSE];r <- head(r,2)
+      txt <- sprintf("%+.0f%% at stage %d (stopping before it leaves k = %d)",100*r$Relative_increase,r$Stage,r$Clusters_after_stage+1)
+      add("Agglomeration schedule",paste0(if(length(txt)>1) "Largest relative increases of the fusion coefficient: " else "Largest relative increase of the fusion coefficient: ",
+        paste(txt,collapse=" and "),"."))}
+  }
   n <- length(sol$cluster);sz <- tabulate(sol$cluster,sol$k)
   add("Cluster sizes",paste0(paste(sprintf("%d (%.0f%%)",sz,100*sz/n),collapse=", "),
     if(min(sz)<max(5,.05*n)) sprintf(". The smallest cluster has only %d cases: interpret it with caution.",min(sz)) else "."))
@@ -116,6 +124,10 @@ key_findings <- function(result,k=NULL) {
       add("Distinguishing variables",paste0(paste(sprintf("%s %.2f",top,eff[top]),collapse=", "),
         " (eta squared, the share of variance explained by the clusters). The profile plot shows the direction."))}
   }
+  rp <- result$tables$Replication
+  if(!is.null(rp)) {iv <- rp$Invariance[rp$K==sol$k]
+    if(length(iv)&&is.finite(iv)) add("Replication",sprintf("Split-half coefficient of invariance %.2f (mean Cohen's kappa of the two cross-classifications): %s.",iv,
+      if(iv>.60) "above .60, the solution replicates" else "below .60, the solution does not replicate well"))}
   if(!is.null(sol$posterior)&&!is.null(result$comparison$Relative_entropy)) {
     re <- result$comparison$Relative_entropy[result$comparison$K==sol$k]
     if(length(re)&&is.finite(re)) add("Classification",sprintf("Relative entropy %.2f: %s.",re,if(re>=.8) "cases are assigned with high certainty" else if(re>=.6) "assignment is fairly certain" else "many cases are uncertain between clusters"))

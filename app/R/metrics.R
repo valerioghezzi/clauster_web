@@ -66,9 +66,9 @@ compare_partitions <- function(a,b) {
   p <- tab/n;px <- rowSums(p);py <- colSums(p);nz <- p>0
   mi <- sum(p[nz]*log(p[nz]/outer(px,py)[nz]));h <- function(v) -sum(v[v>0]*log(v[v>0]));hx<-h(px);hy<-h(py)
   pairs <- choose(n,2);sameboth <- sum(choose(tab,2));sa <- sum(choose(rowSums(tab),2));sb <- sum(choose(colSums(tab),2))
-  ari <- partition_agreement(x,y)[["ARI"]]
+  ari <- partition_agreement(x,y)[["ARI"]];kap <- kappa_matched(x,y)
   list(summary=data.frame(Overlap_N=n,Coverage_A=100*n/length(a$ids),Coverage_B=100*n/length(b$ids),ARI=ari,
-    Rand=(pairs-sa-sb+2*sameboth)/pairs,VI=hx+hy-2*mi,NMI=if(hx+hy==0) 1 else 2*mi/(hx+hy)),table=tab,ids=ids)
+    Rand=(pairs-sa-sb+2*sameboth)/pairs,VI=hx+hy-2*mi,NMI=if(hx+hy==0) 1 else 2*mi/(hx+hy),Kappa=kap[["Kappa"]],Agreement_pct=kap[["Agreement"]]),table=tab,ids=ids)
 }
 mixture_metrics <- function(f,n) {
   model <- f$model;ll <- model$loglik;df <- model$df;z <- f$posterior;k <- ncol(z)

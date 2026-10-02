@@ -15,8 +15,8 @@ seed_at <- function(seed,offset=0) as.integer((as.numeric(seed)+offset-1)%%(.Mac
 budget_ok <- function(cfg) is.null(cfg$.deadline) || as.numeric(Sys.time())<cfg$.deadline
 subset_prepared <- function(p,ix) {
   q <- p;q$X <- p$X[ix,,drop=FALSE];q$raw<-p$raw[ix,,drop=FALSE];q$ids<-p$ids[ix];q$rows<-p$rows[ix]
-  rowwise <- c("euclidean","sqeuclidean","manhattan","maximum","minkowski","correlation","cosine","jaccard","matching")
-  q$distance <- if(isTRUE(p$numeric) && p$config$distance %in% c("jaccard","matching")) metric_distance(q$raw,p$config$distance,p$weights) else if(isTRUE(p$numeric) && p$config$distance %in% rowwise) metric_distance(q$X,p$config$distance) else as.dist(as.matrix(p$distance)[ix,ix,drop=FALSE])
+  rowwise <- c("euclidean","sqeuclidean","manhattan","maximum","minkowski","correlation","cosine","spearman",raw_value_distances)
+  q$distance <- if(isTRUE(p$numeric) && p$config$distance %in% raw_value_distances) metric_distance(q$raw,p$config$distance,p$weights) else if(isTRUE(p$numeric) && p$config$distance %in% rowwise) metric_distance(q$X,p$config$distance) else as.dist(as.matrix(p$distance)[ix,ix,drop=FALSE])
   q
 }
 run_bootstrap <- function(p,fit,cfg=list(),progress=function(...)NULL) {
@@ -79,7 +79,7 @@ simulate_prepared <- function(p,cfg) {
       for(j in seq_along(orders))q$X[,j]<-p$X[orders[[j]],j]
     } else q$X<-q$raw
   }
-  q$distance<-if(cfg$distance=="gower") metric_distance(q$raw,"gower",p$weights) else if(cfg$distance%in%c("jaccard","matching")) metric_distance(q$raw,cfg$distance,p$weights) else metric_distance(q$X,cfg$distance)
+  q$distance<-if(cfg$distance=="gower") metric_distance(q$raw,"gower",p$weights) else if(cfg$distance%in%raw_value_distances) metric_distance(q$raw,cfg$distance,p$weights) else metric_distance(q$X,cfg$distance)
   q
 }
 run_simulation <- function(p,fit,cfg=list(),progress=function(...)NULL) {

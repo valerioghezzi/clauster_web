@@ -95,7 +95,7 @@ report_plot <- function(result,k,type,labels,bw,state) {
 }
 label_of <- function(x,map) unname(ifelse(x %in% names(map),map[x],x))
 distance_labels <- c(euclidean="Euclidean",sqeuclidean="Squared Euclidean",manhattan="Manhattan",maximum="Maximum",minkowski="Minkowski (p = 2)",
-  mahalanobis="Mahalanobis",correlation="Correlation",cosine="Cosine",gower="Gower",jaccard="Jaccard",matching="Simple matching")
+  mahalanobis="Mahalanobis",correlation="Correlation",cosine="Cosine",gower="Gower",jaccard="Jaccard",matching="Simple matching",russellrao="Russell and Rao",chisq="Chi-square",phisq="Phi-square",spearman="Spearman correlation")
 scaling_labels <- c(z="Z scores",none="None",range="Range (0 to 1)",robust="Median and MAD")
 missing_labels <- c(complete="Complete cases",neighbor="Close-neighbor imputation",mean="Mean imputation",available="Available coordinates (Gower)",multiple="Multiple imputation")
 report_date <- function(t=Sys.time()) {
@@ -146,6 +146,11 @@ write_report <- function(result,file,k=NULL,labels=NULL,bw=FALSE,source_name=NUL
   tabs <- result$tables
   fi <- fit_indices(result)
   if(nrow(fi)) {report_table(fi,"Fit indices","Solutions compared side by side",state,right_from=3);report_note(state,fit_indices_note)}
+  if(!is.null(tabs$Agglomeration)){ag <- tail(tabs$Agglomeration[c("Stage","Cluster_1","Cluster_2","Coefficient","Relative_increase","Clusters_after_stage")],10)
+    names(ag) <- c("Stage","Cluster 1","Cluster 2","Coefficient","Relative increase","Clusters after stage")
+    report_table(ag,"Agglomeration schedule (last 10 stages)","Clusters are named by their first case; for Ward the coefficient is the within-cluster sum of squares, as in SPSS",state)}
+  if(!is.null(tabs$Replication)){rp <- tabs$Replication[c("K","Kappa_half_B","Kappa_half_A","Invariance")];names(rp) <- c("K","Kappa, half B","Kappa, half A","Coefficient of invariance")
+    report_table(rp,"Split-half replication","Breckenridge double cross-validation: each half classified by the other half's centroids; above .60 the solution replicates",state)}
   if(length(result$solutions)&&!is.null(result$solutions[[k]])) {
     sol <- result$solutions[[k]];kk <- sol$k;stabs <- solution_tables(result,k)
     lab <- if(length(labels)==kk) labels else NULL
@@ -153,6 +158,9 @@ write_report <- function(result,file,k=NULL,labels=NULL,bw=FALSE,source_name=NUL
     pr <- stabs$Profiles
     if(!is.null(pr)){sil <- stabs$Clusters$Mean_silhouette;if(!is.null(sil))pr$Mean_silhouette <- c(sil,mean(unclass(sol$evaluation$silhouette)[,3]%||%NA))[seq_len(nrow(pr))]
       report_table(with_label(pr),paste0("Cluster profiles (k = ",kk,")"),"Size, share and mean of each variable; for binary variables the mean is the share of the second value",state)}
+    vt <- stabs$Variable_tests
+    if(!is.null(vt)){vt$p <- ifelse(vt$p<.001,"< .001",sprintf("%.3f",vt$p));names(vt)[names(vt)=="Eta_squared"] <- "Eta squared"
+      report_table(vt,paste0("Differences between clusters (k = ",kk,")"),"One-way ANOVA; Groups: clusters sharing a letter do not differ (Tukey HSD, p < .05). For active variables the tests are descriptive only, because the clusters were formed on them",state)}
     if(!is.null(sol$bootstrap)){
       b <- sol$bootstrap$summary[c("Cluster","Mean_Jaccard","P025","P975","Recovery","Dissolution","Valid_B")]
       names(b) <- c("Cluster","Mean Jaccard","2.5%","97.5%","Recovered (J >= 0.75)","Dissolved (J <= 0.50)","Valid replications")
@@ -165,6 +173,7 @@ write_report <- function(result,file,k=NULL,labels=NULL,bw=FALSE,source_name=NUL
     if(is.null(sol$bootstrap))types <- setdiff(types,"Bootstrap")
     if(is.null(sol$evaluation$silhouette))types <- setdiff(types,"Silhouette")
     if(nrow(result$comparison%||%data.frame())<2)types <- setdiff(types,"Indices")
+    if(!is.null(tabs$Agglomeration)&&length(result$solutions)>1)types <- append(types,"Agglomeration",after=match("Dendrogram",types,nomatch=length(types)))
     for(t in types)report_plot(result,k,t,labels,bw,state)
   }
   if(!is.null(tabs$Missingness)&&any(tabs$Missingness$Missing>0))report_table(tabs$Missingness,"Missing values",NULL,state)

@@ -26,6 +26,7 @@ ui<-fluidPage(title="CLAuster",
           actionButton("example","Load example data",class="btn-outline-secondary w-100")),
         card("Variables",selectInput("id","Case ID",choices=c("Row number"="")),
           selectizeInput("variables","Analysis variables",choices=NULL,multiple=TRUE,options=list(plugins=list("remove_button"))),
+          selectizeInput("illustrative","Illustrative variables (described, not used to form clusters)",choices=NULL,multiple=TRUE,options=list(plugins=list("remove_button"))),
           NULL)),
       div(class="cw-main",uiOutput("data_main")))),
     tabPanel(HTML("<span class='step'>2</span>Analysis"),value="Analysis",div(class="cw-layout",
@@ -33,7 +34,7 @@ ui<-fluidPage(title="CLAuster",
         card("Method",selectInput("method","Clustering method",choices=method_choices,selected="ward.D2"),uiOutput("method_note"),
           conditionalPanel("input.method.indexOf('hybrid_')===0",selectInput("hybrid_start","Hierarchical start",choices=c("Ward D2"="ward.D2","Ward D"="ward.D","Average linkage"="average","Complete linkage"="complete","Single linkage"="single","Weighted average linkage"="mcquitty","Centroid linkage"="centroid","Median linkage"="median","Flexible beta"="flexible","DIANA"="diana"),selected="ward.D2")),
               conditionalPanel("input.method==='hybrid_kmeans'",selectInput("hybrid_algorithm","K-means refinement",choices=c("Hartigan-Wong"="Hartigan-Wong","Batch / Lloyd"="Lloyd","Sequential / MacQueen"="MacQueen"),selected="Hartigan-Wong")),
-          selectInput("distance","Distance",choices=c("Euclidean"="euclidean","Squared Euclidean"="sqeuclidean","Manhattan"="manhattan","Maximum"="maximum","Minkowski (p = 2)"="minkowski","Mahalanobis"="mahalanobis","Correlation"="correlation","Cosine"="cosine","Gower (mixed variables)"="gower","Jaccard (0/1)"="jaccard","Simple matching (0/1)"="matching")),
+          selectInput("distance","Distance",choices=c("Euclidean"="euclidean","Squared Euclidean"="sqeuclidean","Manhattan"="manhattan","Maximum"="maximum","Minkowski (p = 2)"="minkowski","Mahalanobis"="mahalanobis","Correlation"="correlation","Cosine"="cosine","Spearman correlation (ordinal)"="spearman","Gower (mixed variables)"="gower","Jaccard (0/1)"="jaccard","Simple matching (0/1)"="matching","Russell and Rao (0/1)"="russellrao","Chi-square (counts)"="chisq","Phi-square (counts)"="phisq")),
           selectInput("scaling","Scaling",choices=c("Z scores"="z","None"="none","Range (0 to 1)"="range","Median and MAD"="robust")),
           selectInput("missing","Missing data",choices=c("Complete cases"="complete","Close-neighbor imputation"="neighbor","Mean imputation"="mean","Available coordinates (Gower)"="available","Multiple imputation"="multiple"))),
         card("Number of clusters",div(class="cw-row",numericInput("k_min","From k",2,min=1,max=30),numericInput("k_max","To k",6,min=1,max=30))),
@@ -43,6 +44,7 @@ ui<-fluidPage(title="CLAuster",
             group("Resampling",selectInput("null","Simulation reference",choices=c("Column permutation"="permutation","One Gaussian population"="gaussian")),
               checkboxInput("subsample","Subsampling without replacement",FALSE),numericInput("fraction","Sampling fraction",.8,min=.2,max=.95,step=.05),
               checkboxInput("gap","Gap statistic",FALSE),numericInput("gap_B","Gap replications",100,min=10,max=1000),
+              checkboxInput("replication","Split-half replication (Breckenridge double cross-validation)",FALSE),
               checkboxInput("advanced_indices","Null simulations also for C-index, Gamma and G-plus (slower)",FALSE)),
             group("Algorithm",numericInput("nstart","Random starts",20,min=1,max=1000),numericInput("max_iter","Maximum iterations",100,min=10,max=10000),
               numericInput("beta","Flexible beta",-.25,min=-1,max=.999,step=.05),
@@ -60,7 +62,7 @@ ui<-fluidPage(title="CLAuster",
     tabPanel(HTML("<span class='step'>3</span>Results"),value="Results",div(class="cw-layout results-layout",
       div(class="cw-side",
         card("View",selectInput("solution","Solution",choices=NULL),
-          selectInput("plot","Plot",choices=c("Profiles","Projection","Silhouette","Dendrogram","Heatmap","Indices","Bootstrap")),
+          selectInput("plot","Plot",choices=c("Profiles","Projection","Silhouette","Dendrogram","Agglomeration","Heatmap","Indices","Bootstrap")),
           selectInput("table","Table",choices=NULL),
           checkboxInput("bw","Black and white",FALSE),textInput("labels","Cluster labels",placeholder="e.g. Low, Medium, High"),uiOutput("labels_hint")),
         card("Export",uiOutput("export_ui")),
@@ -98,6 +100,7 @@ server<-function(input,output,session) {
     updateSelectInput(session,"id",choices=c("Row number"="",names(d)),selected=chosen)
     vars<-names(d)[vapply(d,is.numeric,logical(1))];vars<-setdiff(vars,chosen)
     updateSelectizeInput(session,"variables",choices=names(d),selected=vars,server=TRUE)
+    updateSelectizeInput(session,"illustrative",choices=names(d)[vapply(d,is.numeric,logical(1))],selected=character(),server=TRUE)
     rv$status<-paste0("Data loaded: ",nrow(d)," cases and ",ncol(d)," columns. Check the variables, then open step 2.")
     if(nrow(d)>2000)showNotification(sprintf("This file has %d rows. An analysis can use at most 2,000 cases (500 with multiple imputation).",nrow(d)),type="warning",duration=10)
   }
@@ -129,7 +132,7 @@ server<-function(input,output,session) {
     if(input$method=="hybrid_pam"&&!input$distance%in%c("euclidean","sqeuclidean")&&input$hybrid_start%in%c("ward.D2","ward.D","centroid","median")){updateSelectInput(session,"hybrid_start",selected="average");showNotification("Ward, centroid and median starts need Euclidean distance; Hierarchical start set to Average linkage.",type="message")}
   },ignoreInit=TRUE)
   observeEvent(input$distance,{
-    if(input$distance%in%c("jaccard","matching")&&input$scaling!="none"){updateSelectInput(session,"scaling",selected="none");showNotification("Binary distances use 0/1 values; Scaling set to None.",type="message")}
+    if(input$distance%in%raw_value_distances&&input$scaling!="none"){updateSelectInput(session,"scaling",selected="none");showNotification(if(input$distance%in%count_distances) "Chi-square and phi-square use the counts as they are; Scaling set to None." else "Binary distances use 0/1 values; Scaling set to None.",type="message")}
     if(input$distance!="euclidean"&&input$method%in%euclidean_methods){updateSelectInput(session,"method",selected="average");showNotification(paste(method_labels[[input$method]],"requires Euclidean distance; Method set to Average linkage."),type="message")}
     if(input$distance!="gower"&&input$missing=="available")updateSelectInput(session,"missing",selected="complete")
     if(isTRUE(input$method%in%hybrid_methods)&&!input$distance%in%c("euclidean","sqeuclidean")&&isTRUE(input$hybrid_start%in%c("ward.D2","ward.D","centroid","median"))){
@@ -190,7 +193,8 @@ server<-function(input,output,session) {
     cfg<-cw_config(list(variables=vars,id=if(nzchar(input$id))input$id else NULL,
       levels=lev,weights=w,method=input$method,distance=input$distance,scaling=input$scaling,missing=input$missing,k_min=input$k_min,k_max=input$k_max,
       bootstrap=input$bootstrap,simulation=input$simulation,B=as.integer(input$B),seed=as.integer(input$seed),timeout=input$timeout,
-      null=input$null,subsample=input$subsample,fraction=input$fraction,gap=input$gap,gap_B=as.integer(input$gap_B),
+      null=input$null,subsample=input$subsample,fraction=input$fraction,gap=input$gap,gap_B=as.integer(input$gap_B),replication=isTRUE(input$replication),
+      illustrative=setdiff(input$illustrative,c(vars,input$id)),
       donor_threshold=input$donor_threshold,
       max_missing=input$max_missing,nstart=as.integer(input$nstart),max_iter=as.integer(input$max_iter),beta=input$beta,hybrid_start=input$hybrid_start,hybrid_algorithm=input$hybrid_algorithm,
       advanced_indices=input$advanced_indices,mi_m=as.integer(input$mi_m),mi_iter=as.integer(input$mi_iter),covariance=input$covariance))
@@ -259,8 +263,8 @@ server<-function(input,output,session) {
   output$comparison<-renderTable({req(rv$result);fit_indices(rv$result)},digits=3,na="",hover=TRUE,spacing="s")
   selected_tables<-reactive({req(rv$result)
     g<-c(list(Fit_indices=fit_indices(rv$result)),rv$result$tables);s<-solution_tables(rv$result,input$solution)
-    keep_g<-c("Fit_indices","Descriptives","Missingness","Missing_patterns","Case_audit","Donors","Warnings","MI_fit_summary","MI_events","MI_warnings")
-    keep_s<-c("Profiles","Clusters","Bootstrap","Bootstrap_agreement","Simulation","Posterior","Silhouette")
+    keep_g<-c("Fit_indices","Agglomeration","Replication","Gap","Descriptives","Missingness","Missing_patterns","Case_audit","Donors","Warnings","MI_fit_summary","MI_events","MI_warnings")
+    keep_s<-c("Profiles","Variable_tests","Pairwise_comparisons","Clusters","Bootstrap","Bootstrap_agreement","Simulation","Posterior","Silhouette")
     g<-g[intersect(keep_g,names(g))];if(!any(rv$result$tables$Missingness$Missing>0))g$Missingness<-g$Missing_patterns<-NULL
     c(g[setdiff(names(g),c("Missingness","Missing_patterns","Case_audit","Donors","MI_events","MI_warnings","Warnings"))],s[intersect(keep_s,names(s))],g[intersect(c("Missingness","Missing_patterns","Case_audit","Donors","Warnings","MI_events","MI_warnings"),names(g))])})
   observe({z<-selected_tables();choices<-names(z)[vapply(z,function(t)is.data.frame(t)&&nrow(t)>0,logical(1))];preferred<-intersect(c("Profiles","Fit_indices"),choices)

@@ -7,7 +7,7 @@ cw_config <- function(cfg=list()) {
     k_min=2L,k_max=6L,seed=2026L,B=200L,bootstrap=FALSE,simulation=FALSE,
     null="permutation",subsample=FALSE,fraction=.8,donor_threshold=.5,max_missing=.5,nstart=20L,max_iter=100L,
     beta=-.25,hybrid_start="ward.D2",hybrid_algorithm="Hartigan-Wong",timeout=1800,advanced_indices=FALSE,mi_m=5L,mi_iter=5L,
-    covariance="all",gap=FALSE,gap_B=100L)
+    covariance="all",gap=FALSE,gap_B=100L,replication=FALSE,illustrative=NULL)
   cfg<-cfg[!vapply(cfg,is.null,logical(1))];out<-utils::modifyList(defaults,cfg)
   bounds<-list(B=c(1,10000),gap_B=c(1,1000),nstart=c(1,1000),max_iter=c(1,10000),mi_m=c(2,50),mi_iter=c(1,50),k_min=c(1,30),k_max=c(1,30))
   nice<-c(B="Replications",gap_B="Gap replications",nstart="Random starts",max_iter="Maximum iterations",mi_m="Imputed datasets",mi_iter="Imputation iterations",k_min="From k",k_max="To k")
@@ -164,29 +164,49 @@ scale_model <- function(x, method) {
   list(center=center,scale=scale,method=method)
 }
 apply_scale <- function(x,s) sweep(sweep(as.matrix(x),2,s$center,"-"),2,s$scale,"/")
+# Distances computed on the unscaled values with the variable weights inside their definition.
+binary_distances <- c("jaccard","matching","russellrao")
+count_distances <- c("chisq","phisq")
+raw_value_distances <- c(binary_distances,count_distances)
 metric_distance <- function(x,metric="euclidean",weights=NULL) {
-  if(metric %in% c("jaccard","matching") && any(!as.matrix(x)%in%c(0,1)))stop("Jaccard and simple matching need variables coded 0/1: select only binary variables and Scaling = None.",call.=FALSE)
+  if(metric %in% binary_distances && any(!as.matrix(x)%in%c(0,1)))stop("Jaccard, simple matching and Russell and Rao need variables coded 0/1: select only binary variables and Scaling = None.",call.=FALSE)
   if(metric=="gower") {
     binary <- which(vapply(x,function(v)is.numeric(v)&&all(v[!is.na(v)]%in%c(0,1))&&length(unique(v[!is.na(v)]))==2,logical(1)))
     return(cluster::daisy(x,metric="gower",weights=weights %||% rep(1,ncol(x)),type=if(length(binary))list(symm=binary) else list()))
   }
   x <- as.matrix(x)
   if(any(!is.finite(x))) stop("This distance needs complete numeric values: choose an imputation option under Missing data, or Gower distance with Available coordinates.",call.=FALSE)
-  if(metric %in% c("correlation","cosine")) {
-    y <- x
-    if(metric=="correlation") y <- y-rowMeans(y)
+  if(metric %in% count_distances) {
+    # Chi-square and phi-square measures for frequencies (as in SPSS): the chi-square statistic of the
+    # 2 x p table formed by the two cases' counts; phi-square divides it by the total count before the square root.
+    if(any(x<0)) stop("Chi-square and phi-square distances need counts (zero or positive values): select frequency variables and Scaling = None.",call.=FALSE)
+    if(!is.null(weights)&&length(unique(weights))>1) stop("Variable weights cannot be combined with chi-square or phi-square distances.",call.=FALSE)
+    tot <- rowSums(x)
+    if(any(tot<=0)) stop("Chi-square and phi-square distances are undefined for a case whose counts are all zero: remove such cases or choose another distance.",call.=FALSE)
+    n <- nrow(x);m <- matrix(0,n,n)
+    for(i in seq_len(n-1)) {j <- (i+1):n
+      ck <- sweep(x[j,,drop=FALSE],2,x[i,],"+");nn <- tot[i]+tot[j]
+      a <- sweep(1/ck,2,x[i,]^2,"*")/tot[i]+x[j,,drop=FALSE]^2/ck/tot[j];a[ck==0] <- 0
+      chi <- pmax(0,nn*(rowSums(a)-1));m[i,j] <- if(metric=="chisq") sqrt(chi) else sqrt(chi/nn)}
+    m <- m+t(m)
+    return(as.dist(m))
+  }
+  if(metric %in% c("correlation","cosine","spearman")) {
+    y <- if(metric=="spearman") t(apply(x,1,rank)) else x
+    if(metric!="cosine") y <- y-rowMeans(y)
     norms <- sqrt(rowSums(y^2))
-    if(any(norms<1e-12)) stop("Correlation and cosine distances are undefined for a case whose values are all equal (or all zero). Choose another distance, or remove such cases.",call.=FALSE)
+    if(any(norms<1e-12)) stop("Correlation, Spearman and cosine distances are undefined for a case whose values are all equal (or all zero). Choose another distance, or remove such cases.",call.=FALSE)
     y <- y/norms
     m <- 1-tcrossprod(y);m[] <- pmax(0,pmin(2,m));diag(m) <- 0
     return(as.dist(m))
   }
-  if(metric %in% c("jaccard","matching")) {
-    if(any(!x %in% c(0,1))) stop("Jaccard and simple matching need variables coded 0/1: select only binary variables and Scaling = None.",call.=FALSE)
+  if(metric %in% binary_distances) {
+    if(any(!x %in% c(0,1))) stop("Jaccard, simple matching and Russell and Rao need variables coded 0/1: select only binary variables and Scaling = None.",call.=FALSE)
     w <- weights %||% rep(1,ncol(x))
     if(length(w)!=ncol(x)||any(!is.finite(w))||any(w<0)||sum(w)<=0)stop("Binary-distance weights must be nonnegative, finite, and include at least one positive value.")
     xw <- sweep(x,2,sqrt(w),"*");a <- tcrossprod(xw);count <- rowSums(sweep(x,2,w,"*"));union <- outer(count,count,"+")-a
     if(metric=="jaccard") { out <- 1-a/pmax(union,.Machine$double.eps);out[union<=.Machine$double.eps] <- 0 }
+    else if(metric=="russellrao") { out <- 1-a/sum(w);diag(out) <- 0 }
     else out <- (outer(count,count,"+")-2*a)/sum(w)
     return(as.dist(out))
   }
@@ -286,7 +306,7 @@ prepare_data <- function(data,cfg=list()) {
   z <- if(numeric) apply_scale(raw_kept,transform) else raw_kept
   x <- if(numeric) sweep(z,2,sqrt(w),"*") else raw_kept
   # Gower and binary distances apply variable weights inside the distance definition.
-  dx <- if(cfg$distance=="gower") metric_distance(raw_kept,"gower",w) else if(cfg$distance%in%c("jaccard","matching")) metric_distance(z,cfg$distance,w) else metric_distance(x,cfg$distance)
+  dx <- if(cfg$distance=="gower") metric_distance(raw_kept,"gower",w) else if(cfg$distance%in%raw_value_distances) metric_distance(z,cfg$distance,w) else metric_distance(x,cfg$distance)
   # Pairs of cases with no variable observed in both get the largest distance, and the count is reported.
   no_overlap <- 0L
   if(any(!is.finite(dx))) {

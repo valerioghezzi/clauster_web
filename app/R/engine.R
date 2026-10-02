@@ -14,7 +14,7 @@ run_analysis <- function(data,cfg=list(),progress=function(...)NULL) {
   if(isTRUE(p$no_overlap>0))result$tables$Warnings<-data.frame(K=NA,Message=if(p$no_overlap==1) "1 pair of cases shares no observed variable; its Gower distance was set to 1, the largest possible value." else sprintf("%d pairs of cases share no observed variable; their Gower distance was set to 1, the largest possible value.",p$no_overlap),Occurrences=1L)
   check_method(p,cfg)
   if(cfg$simulation && cfg$null=="gaussian" && !p$numeric)stop("The Gaussian null reference requires numeric variables; select Column permutation.")
-  if(cfg$simulation && cfg$null=="gaussian" && cfg$distance%in%c("jaccard","matching"))stop("The Gaussian null reference is not defined for binary Jaccard or Simple matching distances; select Column permutation.")
+  if(cfg$simulation && cfg$null=="gaussian" && cfg$distance%in%raw_value_distances)stop("The Gaussian null reference is not defined for binary or count distances (Jaccard, simple matching, Russell and Rao, chi-square, phi-square); select Column permutation.")
   kmax<-min(as.integer(cfg$k_max),length(p$ids)-1);kmin<-as.integer(cfg$k_min)
   if(!is.finite(kmin)||!is.finite(kmax)||kmin<1||kmin>kmax)stop(sprintf("Select a valid range of k: minimum k must not exceed maximum k (at most N - 1 = %d).",length(p$ids)-1))
   warnings_log<-list()
@@ -73,6 +73,15 @@ run_analysis <- function(data,cfg=list(),progress=function(...)NULL) {
     if(!is.null(result$gap$table)){result$tables$Gap<-result$gap$table;result$tables$Gap_candidate<-data.frame(K=result$gap$candidate,Rule="Tibs2001SEmax")}
     else {result$tables$Warnings<-add_warning(result$tables$Warnings,paste0("Gap statistic not computed: ",result$gap$error));result$gap<-NULL}
   }
+  if(!is.null(main_cfg$.tree)) {
+    tm<-if(cfg$method%in%hybrid_methods) cfg$hybrid_start else if(cfg$method=="ward_relocate") "ward.D2" else cfg$method
+    result$tables$Agglomeration<-tryCatch(agglomeration_schedule(main_cfg$.tree,tm,p),error=function(e)NULL)
+  }
+  if(isTRUE(cfg$replication)&&length(result$solutions)) {
+    rep<-if(budget_ok(cfg)) tryCatch(run_replication(p,main_cfg,as.integer(names(result$solutions))),error=function(e)conditionMessage(e)) else "the time limit was reached"
+    if(is.data.frame(rep)) result$tables$Replication<-rep else result$tables$Warnings<-add_warning(result$tables$Warnings,paste0("Split-half replication not computed: ",rep))
+  }
+  if(length(cfg$illustrative)) result$illustrative<-illustrative_values(p,cfg$illustrative)
   if(!length(result$solutions)&&result$status=="Completed")result$status<-"No solution could be fitted; see the Status row of the fit indices"
   result$elapsed<-as.numeric(difftime(Sys.time(),start,units="secs"));result$session<-capture.output(sessionInfo());result
 }

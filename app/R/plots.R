@@ -93,6 +93,7 @@ plot_solution <- function(result,k,type="Profiles",labels=NULL,bw=FALSE) {
     Dendrogram=plot_dendrogram(sol,st,K),
     Silhouette=plot_silhouette(sol,st,label,K),
     Indices=plot_indices(result,k),
+    Agglomeration=plot_agglomeration(result,k),
     Bootstrap=plot_bootstrap(sol,st,label,K),
     Heatmap=plot_heatmap(p,cl,st,label,K),
     Projection=plot_projection(p,cl,st,keyed,K),
@@ -259,4 +260,22 @@ plot_projection <- function(p,cl,st,keyed,K) {
   cw_legend(keyed,st)
   mtext("Projection",side=3,line=2.8+1.1*lr,adj=0,font=2,cex=1,col=cw_theme$ink)
   mtext(fit_line(sub),side=3,line=1.7+1.1*lr,adj=0,cex=.78,col=cw_theme$ink2)
+}
+# Relative increase of the fusion coefficient by number of clusters (Hair et al.): a large bar means that
+# going from k to k - 1 clusters merges two dissimilar groups, so k is a candidate solution.
+plot_agglomeration <- function(result,k) {
+  ag <- result$tables$Agglomeration
+  if(is.null(ag)) return(cw_empty("The agglomeration schedule is available for hierarchical and two-stage methods."))
+  r <- ag[is.finite(ag$Relative_increase)&ag$Clusters_after_stage>=1,,drop=FALSE];r <- tail(r,15)
+  if(nrow(r)<2) return(cw_empty("Too few stages to show the agglomeration schedule."))
+  kk <- r$Clusters_after_stage+1;v <- r$Relative_increase;ord <- order(kk);kk <- kk[ord];v <- v[ord]
+  op <- cw_begin(c(4.2,4.6,3.6,1.2));on.exit(par(op))
+  plot.new();plot.window(xlim=c(min(kk)-.6,max(kk)+.6),ylim=c(0,max(v)*1.12))
+  yt <- pretty(c(0,max(v)),5);cw_grid(y=yt);axis(2,at=yt,labels=paste0(round(100*yt),"%"),lwd=0,las=1)
+  axis(1,at=kk,lwd=0);title(xlab="Clusters before the merge (k)",col.lab=cw_theme$ink2)
+  sel <- suppressWarnings(as.integer(k));top <- kk[which.max(v)]
+  cols <- ifelse(kk==top,cw_palette[2],ifelse(kk%in%sel,cw_palette[1],cw_theme$axis))
+  rect(kk-.35,0,kk+.35,v,col=cols,border=NA)
+  cw_title("Agglomeration schedule",sprintf("Relative increase of the fusion coefficient; largest before k = %d",top))
+  invisible(NULL)
 }
