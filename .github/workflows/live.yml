@@ -30,7 +30,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - {browser: firefox, device: ''}
           - {browser: webkit, device: ''}
           - {browser: webkit, device: 'iPhone 14'}
           - {browser: chromium, device: 'Pixel 7'}
@@ -40,6 +39,16 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with: {name: 'shots-${{ matrix.browser }}-${{ strategy.job-index }}', path: tests/shots/}
+  real-firefox:
+    if: (github.event_name == 'workflow_dispatch' && !inputs.many_users) || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: firefox --version; geckodriver --version | head -1; pip install --quiet selenium
+      - run: cd tests && mkdir -p shots && python3 firefox_real.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: {name: shots-firefox-real, path: tests/shots/}
   simultaneous-users:
     if: (github.event_name == 'workflow_dispatch' && !inputs.many_users) || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-24.04

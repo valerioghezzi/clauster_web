@@ -2,7 +2,7 @@ name: publish
 on:
   push:
     branches: [main]
-    paths-ignore: ['.github/workflows/live.yml', 'tests/concurrent.js', 'tests/burst.js', 'README.md']
+    paths-ignore: ['.github/workflows/live.yml', 'tests/concurrent.js', 'tests/burst.js', 'tests/firefox_real.py', 'README.md']
   workflow_dispatch:
 permissions:
   contents: read
