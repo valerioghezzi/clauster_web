@@ -1,0 +1,36 @@
+name: publish
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency: {group: pages, cancel-in-progress: true}
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: r-lib/actions/setup-r@v2
+        with: {r-version: 'release', use-public-rspm: true}
+      - name: Shinylive
+        run: Rscript -e 'install.packages(c("shinylive","shiny","bslib","cluster","mclust","mice","clue","haven","readxl","openxlsx","jsonlite","zip","foreign","renv"))'
+      - name: Export the app to a static site
+        run: Rscript export-site.R app site
+      - name: Smoke test in a real browser
+        run: |
+          cd site && python3 -m http.server 8008 >/dev/null 2>&1 &
+          cd tests && npm install playwright@1 >/dev/null 2>&1 && npx playwright install --with-deps chromium >/dev/null 2>&1 && node smoke.js
+      - uses: actions/configure-pages@v5
+        with: {enablement: true}
+      - uses: actions/upload-pages-artifact@v3
+        with: {path: site}
+  deploy:
+    needs: build
+    runs-on: ubuntu-24.04
+    environment: {name: github-pages, url: '${{ steps.deployment.outputs.page_url }}'}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
