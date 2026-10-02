@@ -242,7 +242,9 @@ prepare_data <- function(data,cfg=list()) {
     if(levels[j]=="binary") raw[[j]] <- as_binary(v,vars[j])
     else if(levels[j]=="ordinal") {
       o <- as_ordinal(v,vars[j])
-      raw[[j]] <- if(cfg$distance=="gower") o else as.numeric(o)
+      # Numeric codes are kept as they are (1, 2, 5, 10 stays 1, 2, 5, 10); text categories are coded by their rank.
+      codes <- suppressWarnings(as.numeric(levels(o)))
+      raw[[j]] <- if(cfg$distance=="gower") o else if(!anyNA(codes)) codes[as.integer(o)] else as.numeric(o)
     } else {
       if(is.factor(v)||is.character(v)) {num <- suppressWarnings(as.numeric(as.character(v)))
         if(any(is.na(num)&!is.na(v))) stop(sprintf("Variable %s contains text; set it to Binary if it has two values, or recode its categories as numbers.",vars[j]))

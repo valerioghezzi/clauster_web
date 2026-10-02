@@ -28,6 +28,7 @@ run_analysis <- function(data,cfg=list(),progress=function(...)NULL) {
     if(!budget_ok(cfg)) {result$status<-"Time limit reached; partial results";break}
     progress(paste0("Fitting k = ",k),k-kmin+1,kmax-kmin+1)
     value<-tryCatch(withCallingHandlers({
+      set.seed(seed_at(cfg$seed,300000+k)) # each k has its own random stream, so a solution does not depend on the k range
       fit<-fit_partition(p,main_cfg,k);e<-evaluate_partition(p,fit$cluster,TRUE,pairs)
       row<-e$metrics;row$Status<-"Completed";sol<-list(ids=p$ids,cluster=fit$cluster,fit=fit,evaluation=e,k=k)
       if(cfg$method=="gmm")row<-cbind(row,mixture_metrics(fit,length(p$ids)))
