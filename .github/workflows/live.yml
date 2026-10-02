@@ -1,0 +1,33 @@
+name: live-site-tests
+# Tests the published site: a full check, people using it at the same time on separate machines, and a burst of requests.
+on:
+  workflow_run:
+    workflows: [publish]
+    types: [completed]
+  workflow_dispatch:
+env:
+  SITE_URL: https://valerioghezzi.github.io/clauster_web/
+jobs:
+  full-check:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: cd tests && npm install playwright@1 >/dev/null 2>&1 && npx playwright install --with-deps chromium >/dev/null 2>&1 && node smoke.js
+  simultaneous-users:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix: {machine: [1, 2, 3, 4, 5]}
+    steps:
+      - uses: actions/checkout@v4
+      - run: cd tests && npm install playwright@1 >/dev/null 2>&1 && npx playwright install --with-deps chromium >/dev/null 2>&1 && USERS=4 TAG=machine${{ matrix.machine }} node concurrent.js
+  request-burst:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: 22}
+      - run: cd tests && REQUESTS=1000 node burst.js

@@ -2,7 +2,7 @@
 const { chromium } = require('playwright');const fs=require('fs');fs.mkdirSync('shots',{recursive:true});
 (async()=>{const b=await chromium.launch();const p=await (await b.newContext({viewport:{width:1366,height:900}})).newPage();
 const log=[];p.on('console',m=>log.push(`[${m.type()}] ${m.text()}`.slice(0,300)));p.on('pageerror',e=>log.push('[pageerror] '+e.message));
-const t0=Date.now();await p.goto('http://127.0.0.1:8008/');
+const t0=Date.now();await p.goto(process.env.SITE_URL||'http://127.0.0.1:8008/');
 const app=()=>{for(const f of p.frames()){if(f!==p.mainFrame()&&f.url().includes('app'))return f}return p.mainFrame()};
 let ready=false;
 for(let i=0;i<120&&!ready;i++){await p.waitForTimeout(5000);if(log.some(l=>/preload error:Error|object 'app_|CLAUSTER LOAD ERROR|could not load dynamic lib/.test(l)))break;for(const f of p.frames()){try{if(await f.$('#example')){ready=true;break}}catch(e){}}
