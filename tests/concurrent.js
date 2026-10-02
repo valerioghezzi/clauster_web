@@ -3,6 +3,9 @@ const { chromium } = require('playwright');
 const URL = process.env.SITE_URL || 'http://127.0.0.1:8008/', USERS = +(process.env.USERS || 4), TAG = process.env.TAG || 'm';
 (async () => {
   const b = await chromium.launch();
+  const startAt = +(process.env.START_AT || 0) * 1000; // common start time (Unix seconds) shared by every machine
+  if (startAt) { const wait = startAt - Date.now(); console.log('waiting', Math.round(wait / 1000), 's for the common start'); if (wait > 0) await new Promise(r => setTimeout(r, wait)); }
+  console.log('start', new Date().toISOString());
   const one = async (u) => {
     const ctx = await b.newContext({ viewport: { width: 1280, height: 860 } }); const p = await ctx.newPage(); const t0 = Date.now(); let f = null;
     await p.goto(URL);
