@@ -1,6 +1,6 @@
-// Loads the published app in Chromium, runs the example analysis and checks the results.
-const { chromium } = require('playwright');const fs=require('fs');fs.mkdirSync('shots',{recursive:true});
-(async()=>{const b=await chromium.launch();const p=await (await b.newContext({viewport:{width:1366,height:900}})).newPage();
+// Loads the app in a browser (BROWSER: chromium, firefox or webkit; DEVICE: optional Playwright device name), runs two analyses and checks the downloads.
+const pw = require('playwright');const engine = pw[process.env.BROWSER||'chromium'];const device = process.env.DEVICE ? pw.devices[process.env.DEVICE] : {viewport:{width:1366,height:900}};const fs=require('fs');fs.mkdirSync('shots',{recursive:true});
+(async()=>{const b=await engine.launch();const p=await (await b.newContext(device)).newPage();console.log('browser',process.env.BROWSER||'chromium',process.env.DEVICE||'desktop 1366x900');
 const log=[];p.on('console',m=>log.push(`[${m.type()}] ${m.text()}`.slice(0,300)));p.on('pageerror',e=>log.push('[pageerror] '+e.message));
 const t0=Date.now();await p.goto(process.env.SITE_URL||'http://127.0.0.1:8008/');
 const app=()=>{for(const f of p.frames()){if(f!==p.mainFrame()&&f.url().includes('app'))return f}return p.mainFrame()};
