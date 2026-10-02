@@ -2,13 +2,14 @@
 const pw = require('playwright');const engine = pw[process.env.BROWSER||'chromium'];const device = process.env.DEVICE ? pw.devices[process.env.DEVICE] : {viewport:{width:1366,height:900}};const fs=require('fs');fs.mkdirSync('shots',{recursive:true});
 (async()=>{const b=await engine.launch();const p=await (await b.newContext(device)).newPage();console.log('browser',process.env.BROWSER||'chromium',process.env.DEVICE||'desktop 1366x900');
 const log=[];p.on('console',m=>log.push(`[${m.type()}] ${m.text()}`.slice(0,300)));p.on('pageerror',e=>log.push('[pageerror] '+e.message));
+p.on('requestfailed',r=>log.push('[requestfailed] '+r.url().slice(0,120)+' '+(r.failure()&&r.failure().errorText)));p.on('response',r=>{if(r.status()>=400||/shinylive\.js$/.test(r.url()))log.push('[response] '+r.status()+' '+r.url().slice(0,120)+' '+(r.headers()['content-type']||''))});
 const t0=Date.now();await p.goto(process.env.SITE_URL||'http://127.0.0.1:8008/');
 const app=()=>{for(const f of p.frames()){if(f!==p.mainFrame()&&f.url().includes('app'))return f}return p.mainFrame()};
 let ready=false;
 for(let i=0;i<120&&!ready;i++){await p.waitForTimeout(5000);if(log.some(l=>/preload error:Error|object 'app_|CLAUSTER LOAD ERROR|could not load dynamic lib/.test(l)))break;for(const f of p.frames()){try{if(await f.$('#example')){ready=true;break}}catch(e){}}
   if(i%12==0){await p.screenshot({path:`shots/load-${i}.png`});console.log(`${Math.round((Date.now()-t0)/1000)} s: frames ${p.frames().length}`)}}
 const dump=async(tag)=>{await p.screenshot({path:`shots/${tag}.png`,fullPage:true});for(const f of p.frames()){try{console.log('--- frame',f.url().slice(0,80),'\n',(await f.evaluate(()=>document.body?document.body.innerText:'')).slice(0,1500))}catch(e){}}
-  console.log('--- console (errors and CLAuster messages)\n'+log.filter(l=>/CLAUSTER|rror|Warning|sys.call|source/.test(l)&&!/Downloading webR package/.test(l)).slice(-80).join('\n'))};
+  console.log('--- console (errors and CLAuster messages)\n'+log.filter(l=>/CLAUSTER|rror|Warning|sys.call|source|requestfailed|response/.test(l)&&!/Downloading webR package/.test(l)).filter((l,i,a)=>a.indexOf(l)===i).slice(-80).join('\n'))};
 if(!ready){console.log('APP NOT READY after',Math.round((Date.now()-t0)/1000),'s');await dump('not-ready');await b.close();process.exit(1)}
 console.log('app ready after',Math.round((Date.now()-t0)/1000),'s');
 let f=null;for(const fr of p.frames()){if(await fr.$('#example')){f=fr;break}}
